@@ -76,6 +76,7 @@ MAME Front-end.
         defaults = {
             'verbose' : False,
             'directory' : '.',
+            'xml' : None,
         }
 
         parser = optparse.OptionParser(usage=usage, description=descr, version=Main.VERSION)
@@ -87,6 +88,10 @@ MAME Front-end.
         parser.add_option('-d', '--directory',
                 dest='directory', action='store',
                 help='Config directory [def: %s]'%parser.defaults.get('directory', None))
+        parser.add_option('-x', '--xml',
+                dest='xml', action='store',
+                help='Read MAME game list from file [def: %s]'%parser.defaults.get('xml', None))
+
 
         return parser
 
@@ -110,7 +115,13 @@ MAME Front-end.
         self.config.read('mamematic.ini')
 
         gamelist = GameList()
-        gamelist.readxml(self.config.get('mame','exec'))
+        if self.opts.xml:
+            gamelist.readxml(self.opts.xml)
+        else:
+            gamelist.readxml(self.config.get('mame','exec'))
+
+        for g in gamelist:
+            log.info(g)
 
         return(0)
 

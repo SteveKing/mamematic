@@ -1,6 +1,6 @@
 ################################################################################
 ##
-##  mamematic.py
+##  gamelist.py
 ##
 ##  Copyright (c) 2016 Steve King
 ##
@@ -17,6 +17,8 @@ import unittest
 import collections
 import json
 import xml.etree.ElementTree as ET
+
+from mameutil import *
 
 ################################################################################
 ##
@@ -38,67 +40,88 @@ class OmniEncoder(json.JSONEncoder):
 ################################################################################
 class Game(object):
     def __init__(self):
-        pass
+        self.name         = None
+        self.sourcefile   = None
+        self.isbios       = None
+        self.isdevice     = None
+        self.ismechanical = None
+        self.runnable     = None
+        self.cloneof      = None
+        self.romof        = None
+        self.sampleof     = None
+        self.description  = None
+        self.year         = None
+        self.manufacturer = None
+        self.status       = None
+        self.emulation    = None
+        self.color        = None
+        self.sound        = None
+        self.graphic      = None
+        self.cocktail     = None
+        self.protection   = None
+        self.savestate    = None
+        self.category     = None
+        self.subcat       = None
+        self.mature       = None
 
     @classmethod
     def from_xml(cls, elem):
+        def _bool(val):
+            assert(val in ('yes','no',True,False,None))
+            return bool(val in ('yes',True))
+
+        def _find(machine, field):
+            elem = machine.find(field)
+            if elem is not None:
+                return elem.text
+            else:
+                return ''
+
+        def _driver_attrib(driver, field):
+            if driver is not None:
+                return driver.attrib.get(field, '')
+            else:
+                return ''
+
         self = cls()
-        self._machine = elem
-        self._driver = self._machine.find('driver')
-        self._input = self._machine.find('input')
-        self.controls = []
-        if self._input is not None:
-            for elem in self._input.findall('control'):
-                self.controls.append(Control(elem))
+        machine = elem
+        driver = machine.find('driver')
+        input = machine.find('input')
+        controls = []
+        if input is not None:
+            for elem in input.findall('control'):
+                controls.append(elem)
 
-        genre = self._genre.get(self.name, (None,None,None))
-        self._category = genre[0]
-        self._subcat   = genre[1]
-        self._mature   = genre[2]
+        self.name         = machine.attrib.get('name', None)
+        self.sourcefile   = machine.attrib.get('sourcefile', None)
+        self.isbios       = _bool(machine.attrib.get('isbios', False))
+        self.isdevice     = _bool(machine.attrib.get('isdevice', False))
+        self.ismechanical = _bool(machine.attrib.get('ismechanical', False))
+        self.runnable     = _bool(machine.attrib.get('runnable', True))
+        self.cloneof      = machine.attrib.get('cloneof', self.name)
+        self.romof        = machine.attrib.get('romof', None)
+        self.sampleof     = machine.attrib.get('sampleof', None)
+        self.description  = _find(machine, 'description')
+        self.year         = _find(machine, 'year')
+        self.manufacturer = _find(machine, 'manufacturer')
+        self.status       = _driver_attrib(driver, 'status')
+        self.emulation    = _driver_attrib(driver, 'emulation')
+        self.color        = _driver_attrib(driver, 'color')
+        self.sound        = _driver_attrib(driver, 'sound')
+        self.graphic      = _driver_attrib(driver, 'graphic')
+        self.cocktail     = _driver_attrib(driver, 'cocktail')
+        self.protection   = _driver_attrib(driver, 'protection')
+        self.savestate    = _driver_attrib(driver, 'savestate')
+        #self.category     = category
+        #self.subcat       = subcat
+        #self.mature       = mature
 
-    def _bool(self, val):
-        assert(val in ('yes','no',True,False,None))
-        return bool(val in ('yes',True))
+        #genre = self._genre.get(self.name, (None,None,None))
+        #self._category = genre[0]
+        #self._subcat   = genre[1]
+        #self._mature   = genre[2]
 
-    def _find(self, field):
-        elem = self._machine.find(field)
-        if elem is not None:
-            return elem.text
-        else:
-            return ''
-
-    def _driver_attrib(self, field):
-        if self._driver is not None:
-            return self._driver.attrib.get(field, '')
-        else:
-            return ''
-
-    name         = property(lambda s:s._machine.attrib.get('name', None))
-    sourcefile   = property(lambda s:s._machine.attrib.get('sourcefile', None))
-    isbios       = property(lambda s:s._bool(s._machine.attrib.get('isbios', False)))
-    isdevice     = property(lambda s:s._bool(s._machine.attrib.get('isdevice', False)))
-    ismechanical = property(lambda s:s._bool(s._machine.attrib.get('ismechanical', False)))
-    runnable     = property(lambda s:s._bool(s._machine.attrib.get('runnable', True)))
-    cloneof      = property(lambda s:s._machine.attrib.get('cloneof', s.name))
-    romof        = property(lambda s:s._machine.attrib.get('romof', None))
-    sampleof     = property(lambda s:s._machine.attrib.get('sampleof', None))
-
-    description  = property(lambda s:s._find('description'))
-    year         = property(lambda s:s._find('year'))
-    manufacturer = property(lambda s:s._find('manufacturer'))
-
-    status       = property(lambda s:s._driver_attrib('status'))
-    emulation    = property(lambda s:s._driver_attrib('emulation'))
-    color        = property(lambda s:s._driver_attrib('color'))
-    sound        = property(lambda s:s._driver_attrib('sound'))
-    graphic      = property(lambda s:s._driver_attrib('graphic'))
-    cocktail     = property(lambda s:s._driver_attrib('cocktail'))
-    protection   = property(lambda s:s._driver_attrib('protection'))
-    savestate    = property(lambda s:s._driver_attrib('savestate'))
-
-    category     = property(lambda s:s._category)
-    subcat       = property(lambda s:s._subcat)
-    mature       = property(lambda s:s._mature)
+        return self
 
     @classmethod
     def genre_init(cls, fname):
@@ -137,18 +160,26 @@ class GameList(collections.MutableMapping):
     def __init__(self):
         self._data = {}
 
-    def readxml(self, exe):
+    def readxml(self, fname):
         log = logging.getLogger()
-        cmd = [exe, '-listxml']
-        log.info('Reading XML from %s...', exe)
-        beg = time.time()
-        sub = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-        tree = ET.parse(sub.stdout)
-        log.info('Parsing took %0.1fs', time.time()-beg)
+        log.info('Reading gamelist from %r', fname)
+        chrono = Chronolog().start()
+
+        try:
+            source = 'file'
+            tree = ET.parse(open(fname))
+        except ET.ParseError:
+            source = 'MAME executable'
+            cmd = [fname, '-listxml']
+            sub = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            tree = ET.parse(sub.stdout)
+
         root = tree.getroot()
         for machine in root.iter('machine'):
             m = Game.from_xml(machine)
             self[m.name] = m
+
+        log.info('Read %d games from %s in %0.1fs', len(self), source, chrono.stop())
 
     def read(self, path):
         jdata = json.load(open(path))
